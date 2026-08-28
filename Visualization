@@ -1,0 +1,110 @@
+Visualization of the classified data
+PROGRAM VisualFragilityClassification
+
+    IMPORT pandas AS pd
+    IMPORT numpy AS np
+    IMPORT matplotlib.pyplot AS plt
+    IMPORT seaborn AS sns
+    IMPORT train_test_split FROM sklearn.model_selection
+    IMPORT RandomForestClassifier FROM sklearn.ensemble
+    IMPORT DecisionTreeClassifier, plot_tree FROM sklearn.tree
+    IMPORT PCA FROM sklearn.decomposition
+    IMPORT StandardScaler FROM sklearn.preprocessing
+    IMPORT confusion_matrix, ConfusionMatrixDisplay FROM sklearn.metrics
+
+    IF "seaborn-v0_8-whitegrid" IN plt.style.available THEN
+        plt.style.use("seaborn-v0_8-whitegrid")
+    ELSE
+        plt.style.use("default")
+    END IF
+
+    file_path = "FSI-2023-DOWNLOAD.xlsx"
+    df = pd.read_excel(file_path)
+
+    bins = [0, 30, 60, 90, 120]
+    labels = ["Sustainable", "Stable", "Warning", "Alert"]
+    df["Fragility"] = pd.cut(df["Total"], bins=bins, labels=labels)
+
+    features = [
+        "C1: Security Apparatus", "C2: Factionalized Elites", "C3: Group Grievance",
+        "E1: Economy", "E2: Economic Inequality", "E3: Human Flight and Brain Drain",
+        "P1: State Legitimacy", "P2: Public Services", "P3: Human Rights",
+        "S1: Demographic Pressures", "S2: Refugees and IDPs", "X1: External Intervention"
+    ]
+
+    X = df[features]
+    y = df["Fragility"]
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42, stratify=y
+    )
+
+    scaler = INSTANTIATE StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train)
+    X_test_scaled = scaler.transform(X_test)
+
+    rf_model = INSTANTIATE RandomForestClassifier(n_estimators=100, max_depth=6, random_state=42)
+    CALL rf_model.fit(X_train_scaled, y_train)
+    y_pred = rf_model.predict(X_test_scaled)
+
+    fig, axes = INSTANTIATE plt.subplots(1, 2, figsize=(14, 5))
+
+    cm = confusion_matrix(y_test, y_pred, labels=labels)
+    disp = INSTANTIATE ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=labels)
+    CALL disp.plot(cmap="Blues", ax=axes[0], colorbar=False)
+    CALL axes[0].set_title("1. Confusion Matrix (Classification Performance)", fontsize=12, fontweight="bold")
+    CALL axes[0].grid(False)
+
+    importances = pd.Series(rf_model.feature_importances_, index=features).sort_values(ascending=True)
+    CALL importances.plot(kind="barh", ax=axes[1], color="#2b5c8f")
+    CALL axes[1].set_title("2. Key Predictors Driving Classification", fontsize=12, fontweight="bold")
+    CALL axes[1].set_xlabel("Importance Score")
+
+    CALL plt.tight_layout()
+    CALL plt.show()
+
+    pca = INSTANTIATE PCA(n_components=2)
+    X_pca = pca.fit_transform(scaler.transform(X))
+
+    pca_df = INSTANTIATE pd.DataFrame(X_pca, columns=["PC1", "PC2"])
+    pca_df["Predicted_Fragility"] = rf_model.predict(scaler.transform(X))
+
+    CALL plt.figure(figsize=(9, 6))
+    palette = {"Sustainable": "#2ecc71", "Stable": "#3498db", "Warning": "#e67e22", "Alert": "#e74c3c"}
+
+    CALL sns.scatterplot(
+        data=pca_df,
+        x="PC1",
+        y="PC2",
+        hue="Predicted_Fragility",
+        palette=palette,
+        style="Predicted_Fragility",
+        s=90,
+        alpha=0.85
+    )
+
+    CALL plt.title("3. Visual 2D Clusters of Country Fragility Levels (PCA)", fontsize=13, fontweight="bold")
+    CALL plt.xlabel("Principal Component 1 (Overall Instability)")
+    CALL plt.ylabel("Principal Component 2 (Socio-Economic Variance)")
+    CALL plt.legend(title="Risk Class", bbox_to_anchor=(1.05, 1), loc="upper left")
+    CALL plt.tight_layout()
+    CALL plt.show()
+
+    dt_model = INSTANTIATE DecisionTreeClassifier(max_depth=3, random_state=42)
+    CALL dt_model.fit(X_train, y_train)
+
+    CALL plt.figure(figsize=(16, 8))
+    CALL plot_tree(
+        dt_model,
+        feature_names=features,
+        class_names=dt_model.classes_,
+        filled=True,
+        rounded=True,
+        fontsize=10
+    )
+    CALL plt.title("4. Decision Rules Breakdown for Fragility Classification", fontsize=14, fontweight="bold")
+    CALL plt.tight_layout()
+    CALL plt.show()
+
+END PROGRAM
+
